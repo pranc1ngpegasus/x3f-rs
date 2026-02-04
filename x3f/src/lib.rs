@@ -68,13 +68,16 @@ impl<'a> X3F<'a> {
             return Err(X3FError::InvalidFileType);
         }
 
-        let extended_header = if header.file_format_version() >= b"2.1" {
-            Some(ExtendedHeaderRef::from_bytes(
-                &bytes[HeaderRef::LENGTH..HeaderRef::LENGTH + ExtendedHeaderRef::LENGTH],
-            )?)
-        } else {
-            None
-        };
+        let extended_header =
+            if u32::from_le_bytes(header.file_format_version().try_into().unwrap_or([0u8; 4]))
+                > 0x2000
+            {
+                Some(ExtendedHeaderRef::from_bytes(
+                    &bytes[HeaderRef::LENGTH..HeaderRef::LENGTH + ExtendedHeaderRef::LENGTH],
+                )?)
+            } else {
+                None
+            };
 
         let directory_pointer =
             DirectoryPointerRef::from_bytes(&bytes[bytes.len() - DirectoryPointerRef::LENGTH..])?;
