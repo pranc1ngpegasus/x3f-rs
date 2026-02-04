@@ -1,5 +1,5 @@
 [workspace]
-members = []
+members = ["x3f"]
 resolver = "3"
 
 [workspace.dependencies]
