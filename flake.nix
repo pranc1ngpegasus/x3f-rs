@@ -29,6 +29,7 @@
             rust
             pkgs.sccache
             pkgs.nixfmt
+            pkgs.taplo
           ];
 
           shellHook = ''
