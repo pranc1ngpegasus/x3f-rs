@@ -6,7 +6,7 @@ license = "MIT"
 name = "x3f"
 publish.workspace = true
 readme = "README.md"
-version = "0.0.2"
+version = "0.0.3"
 
 [dependencies]
 
