@@ -2,7 +2,7 @@
 authors.workspace = true
 description = "SIGMA Foveon X3F RAW file parser"
 edition.workspace = true
-license = "MIT"
+license = "MIT OR Apache-2.0"
 name = "x3f"
 publish.workspace = true
 readme = "README.md"
