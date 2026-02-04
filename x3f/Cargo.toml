@@ -1,6 +1,8 @@
 [package]
 authors.workspace = true
+description = "SIGMA Foveon X3F RAW file parser"
 edition.workspace = true
+license = "MIT"
 name = "x3f"
 publish.workspace = true
 version = "0.0.1"
