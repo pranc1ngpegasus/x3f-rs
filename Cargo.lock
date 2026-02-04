@@ -300,7 +300,7 @@ checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
 
 [[package]]
 name = "x3f"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "proptest",
 ]
