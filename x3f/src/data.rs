@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::X3FError;
 use crate::debug_helper::TruncatedBytes;
 
 /// # Data Subsection Types
@@ -42,9 +43,19 @@ impl fmt::Debug for Prop<'_> {
 }
 
 impl<'a> Prop<'a> {
-    #[must_use]
-    pub fn from_bytes(bytes: &'a [u8]) -> Self {
-        Self { bytes }
+    pub const LENGTH: usize = 24;
+
+    /// Creates a new `Prop` from the given byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`X3FError::TooShort`] if `bytes.len() < Self::LENGTH`.
+    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, X3FError> {
+        if bytes.len() < Self::LENGTH {
+            return Err(X3FError::TooShort);
+        }
+
+        Ok(Self { bytes })
     }
 
     #[must_use]
@@ -110,9 +121,19 @@ impl fmt::Debug for Image<'_> {
 }
 
 impl<'a> Image<'a> {
-    #[must_use]
-    pub fn from_bytes(bytes: &'a [u8]) -> Self {
-        Self { bytes }
+    pub const LENGTH: usize = 28;
+
+    /// Creates a new `Image` from the given byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`X3FError::TooShort`] if `bytes.len() < Self::LENGTH`.
+    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, X3FError> {
+        if bytes.len() < Self::LENGTH {
+            return Err(X3FError::TooShort);
+        }
+
+        Ok(Self { bytes })
     }
 
     #[must_use]
@@ -153,5 +174,32 @@ impl<'a> Image<'a> {
     #[must_use]
     pub fn row_size_in_bytes(&self) -> &'a [u8] {
         &self.bytes[24..28]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use super::*;
+
+    #[test]
+    fn prop_from_bytes_rejects_short_input() {
+        let bytes = std::vec![0u8; Prop::LENGTH - 1];
+        let err = Prop::from_bytes(&bytes).unwrap_err();
+        match err {
+            X3FError::TooShort => {},
+            other => panic!("expected TooShort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn image_from_bytes_rejects_short_input() {
+        let bytes = std::vec![0u8; Image::LENGTH - 1];
+        let err = Image::from_bytes(&bytes).unwrap_err();
+        match err {
+            X3FError::TooShort => {},
+            other => panic!("expected TooShort, got {other:?}"),
+        }
     }
 }

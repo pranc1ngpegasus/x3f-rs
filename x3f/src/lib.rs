@@ -51,6 +51,7 @@ impl fmt::Debug for X3F<'_> {
 pub enum X3FError {
     TooShort,
     InvalidFileType,
+    OutOfBounds,
 }
 
 impl<'a> X3F<'a> {
@@ -72,9 +73,9 @@ impl<'a> X3F<'a> {
             if u32::from_le_bytes(header.file_format_version().try_into().unwrap_or([0u8; 4]))
                 > 0x2000
             {
-                Some(ExtendedHeaderRef::from_bytes(
-                    &bytes[HeaderRef::LENGTH..HeaderRef::LENGTH + ExtendedHeaderRef::LENGTH],
-                )?)
+                let range = HeaderRef::LENGTH..HeaderRef::LENGTH + ExtendedHeaderRef::LENGTH;
+                let extended_bytes = bytes.get(range).ok_or(X3FError::TooShort)?;
+                Some(ExtendedHeaderRef::from_bytes(extended_bytes)?)
             } else {
                 None
             };
@@ -82,9 +83,14 @@ impl<'a> X3F<'a> {
         let directory_pointer =
             DirectoryPointerRef::from_bytes(&bytes[bytes.len() - DirectoryPointerRef::LENGTH..])?;
 
-        let offset =
-            u32::from_le_bytes(directory_pointer.offset().try_into().unwrap_or([0u8; 4])) as usize;
-        let directory = DirectoryRef::from_bytes(&bytes[offset..])?;
+        let offset = u32::from_le_bytes(
+            directory_pointer
+                .offset()
+                .try_into()
+                .map_err(|_| X3FError::TooShort)?,
+        ) as usize;
+        let directory_bytes = bytes.get(offset..).ok_or(X3FError::OutOfBounds)?;
+        let directory = DirectoryRef::from_bytes(directory_bytes)?;
 
         Ok(Self {
             bytes,
@@ -129,17 +135,87 @@ impl<'a> X3F<'a> {
         let length = u32::from_le_bytes(entry.data_length().try_into().ok()?) as usize;
         let entry_type = entry.entry_type();
 
-        if offset + length > self.bytes.len() {
-            return None;
-        }
-
-        let data_bytes = &self.bytes[offset..offset + length];
+        let end = offset.checked_add(length)?;
+        let data_bytes = self.bytes.get(offset..end)?;
 
         match entry_type {
-            b"PROP" => Some(SectionData::Prop(Prop::from_bytes(data_bytes))),
-            b"IMAG" => Some(SectionData::Image(Image::from_bytes(data_bytes))),
-            b"IMA2" => Some(SectionData::Ima2(Image::from_bytes(data_bytes))),
+            b"PROP" => Prop::from_bytes(data_bytes).ok().map(SectionData::Prop),
+            b"IMAG" => Image::from_bytes(data_bytes).ok().map(SectionData::Image),
+            b"IMA2" => Image::from_bytes(data_bytes).ok().map(SectionData::Ima2),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use super::*;
+    use std::vec::Vec;
+
+    fn make_header(file_format_version: [u8; 4]) -> [u8; HeaderRef::LENGTH] {
+        let mut header = [0u8; HeaderRef::LENGTH];
+        header[0..4].copy_from_slice(b"FOVb");
+        header[4..8].copy_from_slice(&file_format_version);
+        header
+    }
+
+    #[test]
+    fn from_bytes_rejects_out_of_bounds_directory_offset() {
+        let mut bytes = Vec::new();
+        // Use version <= 0x2000 so no extended header is required
+        bytes.extend_from_slice(&make_header([0u8; 4]));
+        bytes.extend_from_slice(&1000u32.to_le_bytes());
+
+        let err = X3F::from_bytes(&bytes).unwrap_err();
+        match err {
+            X3FError::OutOfBounds => {},
+            other => panic!("expected OutOfBounds, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_bytes_rejects_missing_extended_header() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&make_header(*b"2.1\0"));
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+
+        let err = X3F::from_bytes(&bytes).unwrap_err();
+        match err {
+            X3FError::TooShort => {},
+            other => panic!("expected TooShort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn section_data_returns_none_for_out_of_bounds_entry() {
+        let mut bytes = Vec::new();
+        // Use version <= 0x2000 so no extended header is required
+        bytes.extend_from_slice(&make_header([0u8; 4]));
+
+        let directory_offset = HeaderRef::LENGTH as u32;
+        let directory_start = bytes.len();
+
+        // Directory header (12 bytes)
+        bytes.extend_from_slice(b"SECd");
+        bytes.extend_from_slice(b"2.0\0");
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+
+        // Directory entry (12 bytes)
+        bytes.extend_from_slice(&60u32.to_le_bytes());
+        bytes.extend_from_slice(&20u32.to_le_bytes());
+        bytes.extend_from_slice(b"PROP");
+
+        let directory_len = bytes.len() - directory_start;
+        let dir_ptr_pos = bytes.len();
+        bytes.resize(dir_ptr_pos + DirectoryPointerRef::LENGTH, 0);
+        bytes[dir_ptr_pos..dir_ptr_pos + 4].copy_from_slice(&directory_offset.to_le_bytes());
+
+        assert_eq!(directory_len, 24);
+
+        let x3f = X3F::from_bytes(&bytes).expect("valid X3F");
+        let entry = x3f.directory().entries().next().expect("entry");
+        assert!(x3f.section_data(&entry).is_none());
     }
 }
