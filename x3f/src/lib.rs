@@ -6,7 +6,7 @@ mod directory;
 mod directory_pointer;
 mod header;
 
-pub use crate::data::{Image, Prop, SectionData};
+pub use crate::data::{Camf, Image, Prop, SectionData};
 pub use crate::directory::{DirectoryEntriesIter, DirectoryEntryRef, DirectoryRef};
 pub use crate::directory_pointer::DirectoryPointerRef;
 pub use crate::header::{ExtendedHeaderRef, HeaderRef};
@@ -142,6 +142,7 @@ impl<'a> X3F<'a> {
             b"PROP" => Prop::from_bytes(data_bytes).ok().map(SectionData::Prop),
             b"IMAG" => Image::from_bytes(data_bytes).ok().map(SectionData::Image),
             b"IMA2" => Image::from_bytes(data_bytes).ok().map(SectionData::Ima2),
+            b"CAMF" => Camf::from_bytes(data_bytes).ok().map(SectionData::Camf),
             _ => None,
         }
     }

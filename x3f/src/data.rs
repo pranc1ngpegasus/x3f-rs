@@ -10,11 +10,13 @@ use crate::debug_helper::TruncatedBytes;
 /// | `"PROP"` | Property list. | List of pairs of strings. Each pair is a name and its corresponding value. |
 /// | `"IMAG"` | Image data | Image data. Has a header indicating dimensions, pixel type, compression, amount of processing done. |
 /// | `"IMA2"` | Image data | Image data. Readers should treat this the same as IMAG. Writers should use this for image sections that contain processed-for-preview data in other than uncompressed RGB24 pixel format. |
+/// | `"CAMF"` | Camera metadata | Structure is undocumented; expose raw bytes. |
 #[derive(Debug)]
 pub enum SectionData<'a> {
     Prop(Prop<'a>),
     Image(Image<'a>),
     Ima2(Image<'a>),
+    Camf(Camf<'a>),
 }
 
 /// # Structure
@@ -177,6 +179,52 @@ impl<'a> Image<'a> {
     }
 }
 
+/// Raw CAMF section data.
+///
+/// The CAMF structure is not documented in the public X3F spec, so we only
+/// expose the raw bytes for now.
+pub struct Camf<'a> {
+    bytes: &'a [u8],
+}
+
+impl fmt::Debug for Camf<'_> {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("Camf")
+            .field("bytes", &TruncatedBytes(self.bytes))
+            .finish()
+    }
+}
+
+impl<'a> Camf<'a> {
+    pub const LENGTH: usize = 4;
+
+    /// Creates a new `Camf` from the given byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`X3FError::TooShort`] if `bytes.len() < Self::LENGTH`.
+    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, X3FError> {
+        if bytes.len() < Self::LENGTH {
+            return Err(X3FError::TooShort);
+        }
+
+        Ok(Self { bytes })
+    }
+
+    #[must_use]
+    pub fn as_bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+
+    #[must_use]
+    pub fn section_identifier(&self) -> &'a [u8] {
+        &self.bytes[0..4]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -197,6 +245,16 @@ mod tests {
     fn image_from_bytes_rejects_short_input() {
         let bytes = std::vec![0u8; Image::LENGTH - 1];
         let err = Image::from_bytes(&bytes).unwrap_err();
+        match err {
+            X3FError::TooShort => {},
+            other => panic!("expected TooShort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn camf_from_bytes_rejects_short_input() {
+        let bytes = std::vec![0u8; Camf::LENGTH - 1];
+        let err = Camf::from_bytes(&bytes).unwrap_err();
         match err {
             X3FError::TooShort => {},
             other => panic!("expected TooShort, got {other:?}"),
